@@ -1,22 +1,37 @@
+
 export default async function handler(req, res) {
     const allowedOrigin = process.env.ALLOWED_ORIGIN;
 
-    res.setHeader(
-        "Access-Control-Allow-Origin",
-        allowedOrigin || "null"
-    );
-    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    const allowedOrigins = (allowedOrigin || "")
+        .split(",")
+        .map(origin => origin.trim())
+        .filter(Boolean);
+
+    const requestOrigin = req.headers.origin;
+
     res.setHeader("Vary", "Origin");
 
     if (
-        !allowedOrigin ||
-        req.headers.origin !== allowedOrigin
+        !requestOrigin ||
+        !allowedOrigins.includes(requestOrigin)
     ) {
         return res.status(403).json({
             error: { message: "Origin not allowed" }
         });
     }
+
+    res.setHeader(
+        "Access-Control-Allow-Origin",
+        requestOrigin
+    );
+    res.setHeader(
+        "Access-Control-Allow-Methods",
+        "POST, OPTIONS"
+    );
+    res.setHeader(
+        "Access-Control-Allow-Headers",
+        "Content-Type"
+    );
 
     if (req.method === "OPTIONS") {
         return res.status(204).end();
@@ -28,18 +43,26 @@ export default async function handler(req, res) {
         });
     }
 
-    const { TREND_AI_API_KEY, TREND_AI_API_URL, TREND_AI_MODEL } =
-        process.env;
+    const {
+        TREND_AI_API_KEY,
+        TREND_AI_API_URL,
+        TREND_AI_MODEL
+    } = process.env;
 
-    if (!TREND_AI_API_KEY || !TREND_AI_API_URL || !TREND_AI_MODEL) {
+    if (
+        !TREND_AI_API_KEY ||
+        !TREND_AI_API_URL ||
+        !TREND_AI_MODEL
+    ) {
         return res.status(500).json({
             error: { message: "AI server settings are missing" }
         });
     }
 
-    const content = typeof req.body?.content === "string"
-        ? req.body.content.trim()
-        : "";
+    const content =
+        typeof req.body?.content === "string"
+            ? req.body.content.trim()
+            : "";
 
     if (!content || content.length > 10000) {
         return res.status(400).json({
@@ -71,16 +94,26 @@ export default async function handler(req, res) {
 
         if (!upstream.ok) {
             console.error("Upstream AI error:", upstream.status);
+
             return res.status(502).json({
-                error: { message: "AIサービスへの接続に失敗しました" }
+                error: {
+                    message: "AIサービスへの接続に失敗しました"
+                }
             });
         }
 
         return res.status(200).json(result);
+
     } catch (error) {
-        console.error("AI request failed:", error.message);
+        console.error(
+            "AI request failed:",
+            error instanceof Error ? error.message : String(error)
+        );
+
         return res.status(502).json({
-            error: { message: "AIサーバーとの通信に失敗しました" }
+            error: {
+                message: "AIサーバーとの通信に失敗しました"
+            }
         });
     }
 }
