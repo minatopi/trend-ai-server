@@ -1,37 +1,22 @@
-
 export default async function handler(req, res) {
-    const allowedOrigin = process.env.ALLOWED_ORIGIN;
+    const allowedOrigins = [
+        process.env.SITE1_ORIGIN,
+        process.env.SITE2_ORIGIN
+    ].filter(Boolean);
 
-    const allowedOrigins = (allowedOrigin || "")
-        .split(",")
-        .map(origin => origin.trim())
-        .filter(Boolean);
+    const origin = req.headers.origin;
 
-    const requestOrigin = req.headers.origin;
-
-    res.setHeader("Vary", "Origin");
-
-    if (
-        !requestOrigin ||
-        !allowedOrigins.includes(requestOrigin)
-    ) {
+    if (!origin || !allowedOrigins.includes(origin)) {
+        res.setHeader("Vary", "Origin");
         return res.status(403).json({
             error: { message: "Origin not allowed" }
         });
     }
 
-    res.setHeader(
-        "Access-Control-Allow-Origin",
-        requestOrigin
-    );
-    res.setHeader(
-        "Access-Control-Allow-Methods",
-        "POST, OPTIONS"
-    );
-    res.setHeader(
-        "Access-Control-Allow-Headers",
-        "Content-Type"
-    );
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Vary", "Origin");
 
     if (req.method === "OPTIONS") {
         return res.status(204).end();
@@ -49,11 +34,7 @@ export default async function handler(req, res) {
         TREND_AI_MODEL
     } = process.env;
 
-    if (
-        !TREND_AI_API_KEY ||
-        !TREND_AI_API_URL ||
-        !TREND_AI_MODEL
-    ) {
+    if (!TREND_AI_API_KEY || !TREND_AI_API_URL || !TREND_AI_MODEL) {
         return res.status(500).json({
             error: { message: "AI server settings are missing" }
         });
@@ -94,7 +75,6 @@ export default async function handler(req, res) {
 
         if (!upstream.ok) {
             console.error("Upstream AI error:", upstream.status);
-
             return res.status(502).json({
                 error: {
                     message: "AIサービスへの接続に失敗しました"
@@ -103,13 +83,8 @@ export default async function handler(req, res) {
         }
 
         return res.status(200).json(result);
-
     } catch (error) {
-        console.error(
-            "AI request failed:",
-            error instanceof Error ? error.message : String(error)
-        );
-
+        console.error("AI request failed:", error.message);
         return res.status(502).json({
             error: {
                 message: "AIサーバーとの通信に失敗しました"
