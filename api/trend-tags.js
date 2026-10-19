@@ -1,45 +1,42 @@
+
 export default async function handler(req, res) {
-    const allowedOrigins = [
-        process.env.SITE1_ORIGIN,
-        process.env.SITE2_ORIGIN
-    ].filter(Boolean);
-
-    const origin = req.headers.origin;
-
-    if (!origin || !allowedOrigins.includes(origin)) {
-        res.setHeader("Vary", "Origin");
-        return res.status(403).json({
-            error: { message: "Origin not allowed" }
-        });
-    }
-
-    res.setHeader("Access-Control-Allow-Origin", origin);
+    // テスト用：すべてのオリジンからのアクセスを許可
+    res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-    res.setHeader("Vary", "Origin");
 
+    // CORSプリフライトリクエストに対応
     if (req.method === "OPTIONS") {
         return res.status(204).end();
     }
 
+    // POST以外は拒否
     if (req.method !== "POST") {
         return res.status(405).json({
             error: { message: "POST only" }
         });
     }
 
+    // AIサーバー設定を取得
     const {
         TREND_AI_API_KEY,
         TREND_AI_API_URL,
         TREND_AI_MODEL
     } = process.env;
 
-    if (!TREND_AI_API_KEY || !TREND_AI_API_URL || !TREND_AI_MODEL) {
+    if (
+        !TREND_AI_API_KEY ||
+        !TREND_AI_API_URL ||
+        !TREND_AI_MODEL
+    ) {
         return res.status(500).json({
-            error: { message: "AI server settings are missing" }
+            error: {
+                message: "AI server settings are missing"
+            }
         });
     }
 
+    // リクエスト本文を検証
     const content =
         typeof req.body?.content === "string"
             ? req.body.content.trim()
@@ -47,11 +44,14 @@ export default async function handler(req, res) {
 
     if (!content || content.length > 10000) {
         return res.status(400).json({
-            error: { message: "本文が空か、長すぎます" }
+            error: {
+                message: "本文が空か、長すぎます"
+            }
         });
     }
 
     try {
+        // AI APIを呼び出す
         const upstream = await fetch(TREND_AI_API_URL, {
             method: "POST",
             headers: {
@@ -63,9 +63,16 @@ export default async function handler(req, res) {
                 messages: [
                     {
                         role: "system",
-                        content: "あなたは日本語SNSのトレンドタグ提案AIです。投稿本文に合う短いトレンド語を最大3個提案してください。ハッシュ記号は付けず、重複や説明文なしでJSON配列だけ返してください。例: [\"ピカチュウ\",\"新作ゲーム\"]"
+                        content:
+                            "あなたは日本語SNSのトレンドタグ提案AIです。" +
+                            "投稿本文に合う短いトレンド語を最大3個提案してください。" +
+                            "ハッシュ記号は付けず、重複や説明文なしでJSON配列だけ返してください。" +
+                            "例: [\"ピカチュウ\",\"新作ゲーム\"]"
                     },
-                    { role: "user", content }
+                    {
+                        role: "user",
+                        content
+                    }
                 ],
                 temperature: 1
             })
@@ -73,8 +80,13 @@ export default async function handler(req, res) {
 
         const result = await upstream.json().catch(() => ({}));
 
+        // AI API側のエラー
         if (!upstream.ok) {
-            console.error("Upstream AI error:", upstream.status);
+            console.error(
+                "Upstream AI error:",
+                upstream.status
+            );
+
             return res.status(502).json({
                 error: {
                     message: "AIサービスへの接続に失敗しました"
@@ -82,9 +94,17 @@ export default async function handler(req, res) {
             });
         }
 
+        // AI APIのレスポンスを返す
         return res.status(200).json(result);
+
     } catch (error) {
-        console.error("AI request failed:", error.message);
+        console.error(
+            "AI request failed:",
+            error instanceof Error
+                ? error.message
+                : String(error)
+        );
+
         return res.status(502).json({
             error: {
                 message: "AIサーバーとの通信に失敗しました"
